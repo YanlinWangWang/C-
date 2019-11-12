@@ -2,6 +2,7 @@
 #define _MemoryMgr_hpp_
 #include<stdlib.h>
 #include<assert.h>
+#include <mutex>
 
 //默认大小
 #define MAX_MEMORY_SZIE 1024
@@ -60,6 +61,7 @@ public:
 	//一般进入这个就是用完了对应内存池空间
 	void* allocMemory(size_t nSize)
 	{
+		std::lock_guard<std::mutex> lg(_mutex);
 		//没有初始化那么就初始化内存分配
 		if (!_pBuf)
 		{
@@ -94,6 +96,7 @@ public:
 	//释放内存
 	void freeMemory(void* pMem)
 	{
+		std::lock_guard<std::mutex> lg(_mutex);
 		//首先判断是内存池还是自主申请的内存
 		//求内存块的块头
 		/*
@@ -175,6 +178,8 @@ protected:
 	size_t _nSize;
 	//内存单元的数量
 	size_t _nBlockSize;
+	//新建锁
+	std::mutex _mutex;
 };
 
 //其中nSize nBlockSize是这个内存的大小
