@@ -3,6 +3,9 @@
 #include<stdlib.h>
 #include<assert.h>
 
+//默认大小
+#define MAX_MEMORY_SZIE 64
+
 class MemoryAlloc;
 //内存块 最小单元
 class MemoryBlock
@@ -40,14 +43,15 @@ public:
 
 	~MemoryAlloc()
 	{
-
+		if (_pBuf)
+			free(_pBuf);
 	}
 
 
 	//申请内存
 	//申请nSize大小的内存
 	//一般进入这个就是用完了对应内存池空间
-	void* allocMem(size_t nSize)
+	void* allocMemory(size_t nSize)
 	{
 		//没有初始化那么就初始化内存分配
 		if (!_pBuf)
@@ -79,7 +83,7 @@ public:
 		return ((char*)pReturn + sizeof(MemoryBlock));
 	}
 	//释放内存
-	void freeMem(void* pMem)
+	void freeMemory(void* pMem)
 	{
 		//首先判断是内存池还是自主申请的内存
 		//求内存块的块头
@@ -111,7 +115,7 @@ public:
 		//不在那么直接释放
 		else
 		{
-			free(pMem);
+			free(pBlock);
 		}
 
 	}
@@ -161,5 +165,92 @@ private:
 	size_t _nSzie;
 	//内存单元的数量
 	size_t _nBlockSzie;
+};
+
+template<size_t nSize, size_t nBlockSize> class MemoryAlloctor :public MemoryAlloc
+{
+public:
+	MemoryAlloctor()
+	{
+		//确保一定是4的整数倍
+		//8 4   61/8=7  61%8=5
+		const size_t n = sizeof(void*);
+		//(7*8)+8 
+		_nSzie = (nSzie / n) * n + (nSzie % n ? n : 0);
+		_nBlockSize = nBlockSize;
+	}
+};
+//内存管理工具
+class MemoryMgr
+{
+private:
+	MemoryMgr()
+	{
+		init(0, 64, &_mem64);
+	}
+
+	~MemoryMgr()
+	{
+
+	}
+public:
+	static MemoryMgr& Instance()
+	{
+		//单例模式 静态 通过私有化构造函数来搞定
+		static MemoryMgr mgr;
+		return mgr;
+	}
+	//申请内存
+	void* allocMem(size_t nSize)
+	{
+		if (nSize <= MAX_MEMORY_SZIE)
+		{
+			return _szAlloc[nSize]->allocMemory(nSize);
+		}
+		else
+		{
+			MemoryBlock* pReturn = (MemoryBlock*)malloc(nSize + sizeof(MemoryBlock));
+			pReturn->bPool = false;
+			pReturn->nID = -1;
+			pReturn->nRef = 1;
+			pReturn->pAlloc = nullptr;
+			pReturn->pNext = nullptr;
+			return pReturn;
+		}
+	}
+
+	//释放内存
+	void freeMem(void* pMem)
+	{
+		MemoryBlock* pBlock = (MemoryBlock*)((char*)pMem - sizeof(MemoryBlock));
+		if (pBlock->bPool)//在内存池中
+		{
+			pBlock->pAlloc->freeMemory(pMem);
+		}
+		else//不在内存池中
+		{
+			if (--pBlock->nRef == 0)
+				free(pMem);
+		}
+	}
+
+	//增加内存块的引用计数
+	void addRef(void* pMem)
+	{
+		MemoryBlock* pBlock = (MemoryBlock*)((char*)pMem - sizeof(MemoryBlock));
+		++pBlock->nRef;
+	}
+private:
+	//初始化内存池映射数组
+	void init(int nBegin, int nEnd, MemoryAlloc* pMemA)
+	{
+		for (int n = nBegin; n <= nEnd; n++)
+		{
+			_szAlloc[n] = pMemA;
+		}
+	}
+private:
+	MemoryAlloctor<64, 10> _mem64;
+	MemoryAlloc* _szAlloc[MAX_MEMORY_SZIE + 1];
 };
 #endif
